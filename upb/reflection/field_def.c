@@ -817,6 +817,30 @@ const upb_FieldDef** _upb_FieldDefs_Sorted(const upb_FieldDef* f, int n,
   return (const upb_FieldDef**)out;
 }
 
+bool upb_FieldDef_MiniDescriptorEncode(const upb_FieldDef* f, upb_Arena* a,
+                                       upb_StringView* out) {
+  UPB_ASSERT(f->is_extension_);
+
+  upb_DescState s;
+  _upb_DescState_Init(&s);
+
+  if (!_upb_DescState_Grow(&s, a)) return false;
+  s.ptr = upb_MtDataEncoder_StartMessage(&s.e, s.ptr, 0);
+
+  const int number = upb_FieldDef_Number(f);
+  const uint64_t modifiers = _upb_FieldDef_Modifiers(f);
+
+  if (!_upb_DescState_Grow(&s, a)) return false;
+  s.ptr = upb_MtDataEncoder_PutField(&s.e, s.ptr, f->type_, number, modifiers);
+
+  if (!_upb_DescState_Grow(&s, a)) return false;
+  *s.ptr = '\0';
+
+  out->data = s.buf;
+  out->size = s.ptr - s.buf;
+  return true;
+}
+
 static void resolve_extension(upb_DefBuilder* ctx, const char* prefix,
                               upb_FieldDef* f,
                               const google_protobuf_FieldDescriptorProto* field_proto) {
@@ -843,7 +867,7 @@ static void resolve_extension(upb_DefBuilder* ctx, const char* prefix,
     UPB_ASSERT(upb_FieldDef_Number(f) == ext->field.number);
   } else {
     upb_StringView desc;
-    if (!upb_MiniDescriptor_EncodeField(f, ctx->tmp_arena, &desc)) {
+    if (!upb_FieldDef_MiniDescriptorEncode(f, ctx->tmp_arena, &desc)) {
       _upb_DefBuilder_OomErr(ctx);
     }
 
